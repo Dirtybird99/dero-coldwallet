@@ -3,17 +3,21 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
+	"math/big"
+	"runtime"
+	"strconv"
+
 	"github.com/deroproject/derohe/config"
+	"github.com/deroproject/derohe/cryptography/bn256"
+	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/transaction"
 	"github.com/deroproject/derohe/walletapi"
 	"github.com/deroproject/derohe/walletapi/mnemonics"
 	"github.com/docopt/docopt-go"
-	"runtime"
-	"strconv"
 )
 
-var cmd = `DERO ColdWallet by Slixe
+var cmd = `DERO ColdWallet by Slixe, modified by mmarcel
 DERO : A secure, private blockchain with smart-contracts
 
 Usage:
@@ -72,26 +76,54 @@ func main() {
 	w.SetOfflineMode()
 	w.SetNetwork(true)
 
-	fmt.Println("DERO Address:", w.GetAddress())
-	fmt.Println("SEED:", w.GetSeedinLanguage(language.Name))
-	fmt.Println("Generating valid TX Registration... This can take up to 2hours!")
+	fmt.Println("Address:", w.GetAddress())
+	fmt.Println("Seed   :", w.GetSeedinLanguage(language.Name))
 
-	txChan := make(chan *transaction.Transaction)
-	counter := 0
+	txChan := make(chan *transaction.Transaction, 1)
+
 	for i := 0; i < runtime.GOMAXPROCS(0); i++ {
 		go func() {
-			for counter == 0 {
-				tx := w.GetRegistrationTX()
-				hash := tx.GetHash()
-				if hash[0] == 0 && hash[1] == 0 && hash[2] == 0 {
-					txChan <- tx
-					counter++
-					break
-				}
-			}
+			GetRegistrationTX(w, txChan)
 		}()
 	}
-	regTx := <- txChan
-	fmt.Println("Tx Registration hex:", hex.EncodeToString(regTx.Serialize()))
-	fmt.Println("you must propagate the registration transaction yourself (through SendRawTransaction API) for your account to be valid and registered on the blockchain!")
+	regTx := <-txChan
+	close(txChan)
+	tx_data := hex.EncodeToString(regTx.Serialize())
+	fmt.Println("TX data:", tx_data)
+	fmt.Printf("\ncurl -X POST <node_address>:10102/json_rpc -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"sendrawtransaction\",\"params\":{\"tx_as_hex\":\"%s\"}}'\n", tx_data)
+}
+
+// faster version: incrementing the secret and point instead of generating random secrets and points until we find a valid one
+func GetRegistrationTX(w *walletapi.Wallet_Memory, txChan chan<- *transaction.Transaction) {
+	var tx transaction.Transaction
+	tx.Version = 1
+	tx.TransactionType = transaction.REGISTRATION
+	add := w.GetAddress().PublicKey.EncodeCompressed()
+	copy(tx.MinerAddress[:], add[:])
+
+	var tmppoint bn256.G1
+
+	tmpsecret := crypto.RandomScalar()
+	tmppoint.ScalarMult(crypto.G, tmpsecret)
+
+	for {
+		serialize := []byte(fmt.Sprintf("%s%s", w.Get_Keys().Public.G1().String(), tmppoint.String()))
+		c := crypto.ReducedHash(serialize)
+		s := new(big.Int).Mul(c, w.Get_Keys().Secret.BigInt())
+		s = s.Mod(s, bn256.Order)
+		s = s.Add(s, tmpsecret)
+		s = s.Mod(s, bn256.Order)
+
+		crypto.FillBytes(c, tx.C[:])
+		crypto.FillBytes(s, tx.S[:])
+
+		hash := tx.GetHash()
+		if hash[0] == 0 && hash[1] == 0 && hash[2] == 0 {
+			break
+		}
+		tmpsecret.Add(tmpsecret, big.NewInt(1))
+		tmppoint.Add(&tmppoint, crypto.G)
+	}
+
+	txChan <- &tx
 }
