@@ -11,8 +11,10 @@ Faster registration process. Display ready-to-use `curl` command. Only the daemo
 
 ### Building
 
-go mod tidy<br />
+```
+go mod tidy
 go build -o coldwallet ./cmd/coldwallet
+```
 
 ### Example
 Seed language 0 (english)
