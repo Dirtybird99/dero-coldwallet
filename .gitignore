@@ -1,0 +1,12 @@
+# build outputs
+/dist/
+*.exe
+/coldwallet
+/verify
+
+# generated artifacts (may contain a seed in plaintext)
+preview-wallet.html
+*.paper.html
+
+# tooling
+/.playwright-mcp/
