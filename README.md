@@ -24,8 +24,11 @@ out to broadcast later.
 - Every wallet is **self-verified**: the seed is re-derived back to the address
   before anything is printed, and the program aborts on any mismatch.
 - The registration TX is validated with derohe's own `IsRegistrationValid()`.
-- **Zero filesystem footprint** by default: nothing is written to disk unless you
-  pass `--paper`.
+- **No secret material is written to disk.** The seed lives only in memory unless
+  you pass `--paper` (which writes it in plaintext). The program does create and then
+  delete a throwaway, effectively-empty temporary data directory on startup (required
+  by derohe's initialization); it is removed on exit and left behind only if the
+  process is hard-killed (e.g. `SIGKILL`).
 - Runs in forced **offline mode**; it makes no network connections.
 
 ## Build
@@ -86,12 +89,16 @@ git checkout <release-tag>
 # compare your dist/SHA256SUMS against the published SHA256SUMS
 ```
 
-Because the build is pure Go with `CGO_ENABLED=0`, `-trimpath`, and
-`-ldflags=all=-buildid=`, the same source produces byte-identical binaries **on
-the pinned Go toolchain** (`toolchain go1.26.0` in `go.mod`; with the default
-`GOTOOLCHAIN=auto`, `go` fetches it automatically). A different Go version may
-produce a different binary, so match the toolchain when comparing. Dependencies
-are pinned by `go.sum`.
+Because the build is pure Go with `CGO_ENABLED=0`, `-trimpath`,
+`-ldflags=all=-buildid=`, and `-buildvcs=false`, the same source produces
+byte-identical binaries **on the pinned Go toolchain** (`toolchain go1.26.0` in
+`go.mod`; with the default `GOTOOLCHAIN=auto`, `go` fetches it automatically) —
+regardless of whether you obtained the source via `git clone` or a release
+tarball. (`-buildvcs=false` matters: without it the toolchain stamps the `.git`
+revision and dirty-state into the binary, so clone-based and tarball-based
+rebuilders would otherwise never converge.) A different Go version may produce a
+different binary, so match the toolchain when comparing. Dependencies are pinned
+by `go.sum`.
 
 **Check a downloaded release:**
 
