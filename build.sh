@@ -27,8 +27,9 @@ GO_VERSION="$(go env GOVERSION)"
 EXPECT="$(awk '/^toolchain /{print $2}' go.mod)"
 if [ -n "$EXPECT" ] && [ "$GO_VERSION" != "$EXPECT" ]; then
   echo "Toolchain mismatch: go.mod pins $EXPECT but building with $GO_VERSION" >&2
-  echo "With the default GOTOOLCHAIN=auto, 'go' fetches the pinned toolchain;" >&2
-  echo "if you forced GOTOOLCHAIN=local, install/select $EXPECT and retry." >&2
+  echo "GOTOOLCHAIN=auto only upgrades, never downgrades, so if your host Go is" >&2
+  echo "newer than the pin, run: GOTOOLCHAIN=$EXPECT ./build.sh" >&2
+  echo "If you forced GOTOOLCHAIN=local, install/select $EXPECT and retry." >&2
   exit 1
 fi
 echo "Building with $GO_VERSION (reproducible flags)"
