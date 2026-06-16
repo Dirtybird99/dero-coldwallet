@@ -107,7 +107,11 @@ toolchain when comparing. Dependencies are pinned by `go.sum`.
 **Check a downloaded release:**
 
 ```
+# Linux / Windows (GNU coreutils):
 sha256sum -c SHA256SUMS
+# macOS (BSD), equivalent:
+shasum -a 256 -c SHA256SUMS
+
 minisign -Vm SHA256SUMS -P <published-public-key>
 ```
 

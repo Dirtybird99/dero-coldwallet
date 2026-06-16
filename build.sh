@@ -32,6 +32,21 @@ if [ -n "$EXPECT" ] && [ "$GO_VERSION" != "$EXPECT" ]; then
   echo "If you forced GOTOOLCHAIN=local, install/select $EXPECT and retry." >&2
   exit 1
 fi
+
+# Portable SHA-256: GNU coreutils `sha256sum` or BSD/macOS `shasum`. Force binary
+# mode (-b) so the line marker is identical on every OS; combined with the
+# LC_ALL=C sort below, SHA256SUMS comes out byte-identical regardless of the
+# builder's platform, so independent rebuilders can compare the signed file
+# directly. Fail fast here rather than after a multi-minute build.
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256() { sha256sum -b "$@"; }
+elif command -v shasum >/dev/null 2>&1; then
+  sha256() { shasum -a 256 -b "$@"; }
+else
+  echo "Need 'sha256sum' (GNU coreutils) or 'shasum' (BSD/macOS) to write SHA256SUMS" >&2
+  exit 1
+fi
+
 echo "Building with $GO_VERSION (reproducible flags)"
 
 rm -rf "$OUT"
@@ -53,10 +68,11 @@ for t in "${targets[@]}"; do
   GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o "$out" ./cmd/coldwallet
 done
 
-( cd "$OUT" && sha256sum coldwallet-* > SHA256SUMS )
+( cd "$OUT" && sha256 coldwallet-* | LC_ALL=C sort -k2 > SHA256SUMS )
 echo
 echo "Artifacts and checksums written to $OUT/"
 cat "$OUT/SHA256SUMS"
 echo
 echo "To sign (maintainer): minisign -Sm $OUT/SHA256SUMS"
-echo "To verify (user):     minisign -Vm $OUT/SHA256SUMS -P <public-key>  &&  sha256sum -c $OUT/SHA256SUMS"
+echo "To verify (user):     minisign -Vm $OUT/SHA256SUMS -P <public-key>"
+echo "                      then: sha256sum -c $OUT/SHA256SUMS   (macOS: shasum -a 256 -c $OUT/SHA256SUMS)"
